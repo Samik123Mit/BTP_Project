@@ -102,6 +102,115 @@ The best method is chosen separately for the modality and degradation—not by v
 
 The gains on moderate thermal inputs are intentionally reported as small. This is a useful finding: when an input is already structurally good, aggressive processing should not be expected to create a dramatic or trustworthy change.
 
+### Selected visual evidence gallery
+
+Each sheet always starts with the clean reference and degraded input, followed by **every** attempted restoration. The examples below deliberately cover different modalities and failure modes.
+
+| Case | What to inspect | Result |
+|---|---|---|
+| [Optical / moderate](outputs/real_image_enhancement/00_optical_moderate_comparison.png) | Noise, low contrast, 2× loss, missing blocks | NLM+CLAHE variants improve traceability of scene boundaries but do not recreate blocked content. |
+| [Optical / motion](outputs/real_image_enhancement/00_optical_motion_comparison.png) | Directional blur and compression | NLM+CLAHE+unsharp has highest mean SSIM within this condition. |
+| [Thermal / moderate](outputs/real_image_enhancement/00_thermal_moderate_comparison.png) | Thermal noise and contrast loss | Conservative NLM is preferred: it reduces noise while avoiding excess contrast manipulation. |
+| [Thermal / severe](outputs/real_image_enhancement/00_thermal_severe_comparison.png) | Strong blur, low resolution, noise, holes | NLM+CLAHE gives the best structural score, but holes remain an uncertainty rather than recovered truth. |
+
+![Optical motion example](outputs/real_image_enhancement/00_optical_motion_comparison.png)
+
+![Thermal moderate example](outputs/real_image_enhancement/00_thermal_moderate_comparison.png)
+
+## Exact technical protocol
+
+### Input preparation
+
+The ULB17-VT pickle archive is read directly without changing its source arrays. For presentation and conventional image processing, each thermal image is mapped to an 8-bit display range using its own 1st–99th percentile range. The original raw thermal array is never overwritten. Optical RGB data remains in its native 8-bit three-channel form.
+
+The visible subset uses fixed official test-set indices: `0, 7, 14, 23, 31, 40`. Fixed indices make visual examples and aggregate measurements repeatable.
+
+### Degradation model
+
+The degradation is deterministic for a sample/profile combination. It follows this ordered pipeline:
+
+```text
+clean image
+  -> resize down (2× moderate/motion; 4× severe)
+  -> bicubic resize to original dimensions
+  -> Gaussian blur (moderate/severe) or 13-pixel horizontal motion kernel
+  -> contrast/brightness reduction
+  -> additive zero-mean Gaussian noise
+  -> two rectangular missing-data blocks
+  -> JPEG encode/decode (quality 48 moderate/motion; 24 severe)
+```
+
+This produces a mixed-degradation setting closer to practical image failures than applying a single filter benchmark. It also allows controlled ablation later: any individual step can be disabled or varied in `run_real_image_enhancement.py`.
+
+### Restoration methods and parameters
+
+| Method | Implementation details | Intended benefit | Failure mode to monitor |
+|---|---|---|---|
+| Bicubic baseline | OpenCV cubic interpolation | Reference for resizing | Cannot add lost detail |
+| Gaussian+CLAHE | Gaussian sigma 0.8, CLAHE clip limit 2.0, 8×8 tiles | Mild smoothing and local contrast | Noise/false contrast boost |
+| Median+CLAHE | 3×3 median, CLAHE | Remove impulse-like noise | Removes narrow detail |
+| Bilateral+CLAHE | Diameter 7, sigma color/space 40, CLAHE | Smooth while protecting edges | Can alter thermal gradients |
+| Conservative bilateral | Diameter 7, sigma color/space 35 | Edge-aware smoothing without contrast remapping | May retain fine noise |
+| Conservative NLM | Fast NLM, strength 6 color/gray | Strong denoising with no CLAHE | May blur small features |
+| NLM+CLAHE | Fast NLM plus CLAHE | Denoise and expose local structure | Can make noise appear as detail |
+| NLM+CLAHE+unsharp | NLM+CLAHE, then 1.3 sigma unsharp mask | Sharper boundaries | Ringing / oversharpening |
+| Automatic Telea inpainting | Candidate mask from flat grey missing regions, radius 5 | Fill known-like corrupt regions | Plausible fill is not recovered ground truth |
+
+The waveform-image experiment adds **blind waveform interpolation** and real pre-trained **EDSR ×2 neural super-resolution**. Those experiments are separate and clearly marked exploratory.
+
+### Why missing regions are treated differently
+
+Blur and noise can often be reduced by filters because some local information remains. A completely blank/occluded patch contains no direct source information. Inpainting can create a visually continuous patch, but it must never be presented as verified anatomy, verified temperature, or verified waveform. The result should be displayed as an uncertainty-aware repair candidate and validated against another frame/sensor/reference wherever possible.
+
+## How to read the outputs
+
+### Comparison-sheet layout
+
+```text
+clean reference | degraded input | conservative methods | contrast methods | inpainting
+```
+
+- **Clean reference** is never given to the enhancement method.
+- **Degraded input** is the only input a real restoration pipeline receives.
+- **Remaining panels** are alternative outputs from exactly the same input.
+- `metrics_per_image.csv` supplies the corresponding measured fidelity.
+
+### File naming
+
+`00_thermal_severe_comparison.png` means: test image index 00, thermal modality, severe degradation, one complete sheet of results. The `individual_outputs/` folder, kept locally, contains the same results as separate full-resolution images.
+
+### Interpretation rules used in this project
+
+1. Compare to the clean reference visually, then check PSNR/SSIM/MAE.
+2. Prefer the least aggressive method that preserves the relevant structure.
+3. Do not call a result “better” merely because its contrast is higher.
+4. Treat inpainted pixels as estimated content, not source truth.
+5. For radiometric thermal analysis, calculate temperature from raw calibrated values, not a contrast-enhanced display image.
+
+## Running individual experiments
+
+| Command | Produces |
+|---|---|
+| `python run_real_image_enhancement.py` | Main 36 real RGB/thermal comparison sheets and metrics |
+| `python run_ulb17_benchmark.py` | Direct 80×60 → 320×240 thermal 4× super-resolution comparison |
+| `python run_waveform_image_benchmark.py` | Paired waveform-image degradation, restoration, gap-repair demonstrations |
+| `$env:RUN_EDSR_ALL=1; python run_waveform_image_benchmark.py` | EDSR neural SR on every waveform example; slower on CPU |
+| `python export_real_samples.py` | Rebuilds the visible six-image source subset from downloaded archive |
+
+## Extension to biomedical feature extraction
+
+Phase 1 deliberately stops before making biomedical-property claims. A validated Phase 2 would use paired biomedical acquisition and independent reference values:
+
+```text
+raw optical + radiometric thermal frames
+             -> enhancement selected on held-out data
+             -> ROI / waveform / contour extraction
+             -> calibrated feature model
+             -> compare against independent physical reference
+```
+
+Candidate image-derived intermediate features include ROI intensity statistics, thermal gradients, hotspot area, boundary geometry, temporal waveform shape, and signal quality. Density and Young’s modulus are not image-enhancement outputs; their estimation requires a separately calibrated mechanical/biophysical model and ground-truth measurements.
+
 ## Reproducibility
 
 ### Requirements
