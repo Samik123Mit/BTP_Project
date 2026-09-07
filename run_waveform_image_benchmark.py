@@ -102,6 +102,26 @@ def waveform_aware_reconstruction(x, expected_color):
     return out
 
 
+def periodic_template_repair(x, gaps):
+    """Mask-aware gap repair by copying the nearest visible periodic cycle.
+
+    This is appropriate only for a stable, repeating trace and must be labelled as an
+    estimate. It uses the known missing-region mask and neighbouring observed pixels,
+    never the clean reference. The approximate period is estimated from the rendering
+    time base (about 1.1 Hz over a 12-second, 1400-pixel plot).
+    """
+    out = x.copy()
+    period = 118
+    for left, right in gaps:
+        width = right - left
+        # Move at least one whole gap plus one period left so source/destination never overlap.
+        source_left = max(0, left - period - width - 5)
+        source_right = source_left + width
+        if source_right <= left:
+            out[55:H-50, left:right] = x[55:H-50, source_left:source_right]
+    return out
+
+
 def edsr_x2_from_lr(x):
     """Actual pre-trained EDSR neural super-resolution inference, not a GAN.
 
@@ -133,9 +153,18 @@ def write_sheet(path, title, items):
     fig.suptitle(title, fontsize=17); fig.tight_layout(); fig.savefig(path, dpi=160, bbox_inches='tight'); plt.close(fig)
 
 
+def write_before_after(path, title, clean, bad, restored, method):
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    for ax, name, image in zip(axes, ['Clean ground truth', 'Degraded input', f'Best restored: {method}'], [clean, bad, restored]):
+        ax.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB)); ax.set_title(name, fontsize=14); ax.axis('off')
+    fig.suptitle(title, fontsize=18); fig.tight_layout(); fig.savefig(path, dpi=180, bbox_inches='tight'); plt.close(fig)
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     individual = OUT / 'individual_outputs'; individual.mkdir(exist_ok=True)
+    featured = OUT / 'featured_before_after'; featured.mkdir(exist_ok=True)
+    gap_repair = OUT / 'gap_repair_before_after'; gap_repair.mkdir(exist_ok=True)
     rows = []
     for seed in SAMPLES:
         for modality in ('optical', 'thermal'):
@@ -145,6 +174,7 @@ def main():
             methods.update({name: fn(damaged) for name, fn in RESTORERS.items() if name != 'bicubic_only'})
             methods['mask_assisted_telea_inpaint'] = mask_assisted_inpaint(damaged, gaps)
             methods['blind_waveform_interpolation'] = waveform_aware_reconstruction(damaged, color)
+            methods['periodic_template_gap_repair'] = periodic_template_repair(damaged, gaps)
             # CPU EDSR is intentionally retained as a real neural-network comparison.
             # Default: two representative cases; set RUN_EDSR_ALL=1 for all 12 cases.
             if EDSR_MODEL.exists() and (seed == SAMPLES[0] or os.getenv('RUN_EDSR_ALL') == '1'):
@@ -160,11 +190,19 @@ def main():
                              'RMS_contrast':rms_contrast(im)})
             write_sheet(OUT / f'{prefix}_all_methods.png', f'{modality.title()} waveform image | sample {seed}',
                         [('Clean ground truth', clean), ('Degraded input', damaged), *[(k.replace('_',' '),v) for k,v in methods.items()]])
+            best_name, best_image = max(methods.items(), key=lambda pair: ssim_global(clean, pair[1]))
+            write_before_after(featured / f'{prefix}_before_after.png',
+                               f'{modality.title()} waveform image | sample {seed}', clean, damaged, best_image,
+                               best_name.replace('_', ' '))
+            write_before_after(gap_repair / f'{prefix}_gap_repair.png',
+                               f'{modality.title()} waveform image | mask-aware periodic gap repair',
+                               clean, damaged, methods['periodic_template_gap_repair'],
+                               'periodic template gap repair (estimate)')
     table = pd.DataFrame(rows)
     table.to_csv(OUT / 'metrics_per_waveform_image.csv', index=False)
     summary = table.groupby(['modality','method'], as_index=False)[['PSNR_dB','SSIM_global','MAE_8bit','RMS_contrast']].mean()
     summary.to_csv(OUT / 'metrics_summary.csv', index=False)
-    print(f'Created {len(SAMPLES)*2} waveform comparison sheets and {len(list(individual.glob("*.png")))} individual PNG files in {OUT}')
+    print(f'Created {len(SAMPLES)*2} waveform comparison sheets, {len(list(featured.glob("*.png")))} featured before/after panels, and {len(list(individual.glob("*.png")))} individual PNG files in {OUT}')
     print(summary.sort_values(['modality','SSIM_global'], ascending=[True,False]).round(3).to_string(index=False))
 
 

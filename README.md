@@ -315,6 +315,22 @@ python run_waveform_image_benchmark.py
 
 This additional controlled experiment creates paired optical and thermal waveform-image renders, applies blur/noise/lower resolution/missing trace segments, then evaluates filters, inpainting, blind trace interpolation, and EDSR. It demonstrates how image restoration can support later waveform feature extraction. The waveform renders are synthetic demonstrations, explicitly separate from the real-image benchmark.
 
+### Waveform-image recovery gallery
+
+The waveform experiment gives a direct visual analogue of incomplete physiological traces: a clean waveform image is degraded, sections are erased, then several recovery strategies are tested. The featured panel selects the highest-SSIM output for that individual render; the all-method sheet preserves every trial.
+
+| Optical waveform with missing trace regions | Thermal waveform with missing trace regions |
+|---|---|
+| [Before/after panel](outputs/waveform_images/featured_before_after/101_optical_before_after.png) | [Before/after panel](outputs/waveform_images/featured_before_after/101_thermal_before_after.png) |
+| [All methods](outputs/waveform_images/101_optical_all_methods.png) | [All methods](outputs/waveform_images/101_thermal_all_methods.png) |
+| [Missing-gap repair view](outputs/waveform_images/gap_repair_before_after/101_optical_gap_repair.png) | [Missing-gap repair view](outputs/waveform_images/gap_repair_before_after/101_thermal_gap_repair.png) |
+
+![Optical waveform recovery](outputs/waveform_images/featured_before_after/101_optical_before_after.png)
+
+![Optical missing-waveform repair](outputs/waveform_images/gap_repair_before_after/101_optical_gap_repair.png)
+
+The periodic-template gap-repair output assumes the trace repeats steadily and copies an adjacent observed cycle into a known missing interval. It can make a trace continuous for display or downstream candidate extraction, but it is an **estimate**, not verified ground truth. This limitation is especially important for irregular physiological rhythms.
+
 ## Repository layout
 
 ```text
