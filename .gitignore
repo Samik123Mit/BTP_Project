@@ -1,0 +1,10 @@
+__pycache__/
+.ipynb_checkpoints/
+data/ibvp/
+data/ULB17-VT.pkl
+data/fda_facial_temperature/
+models/
+outputs/real_image_enhancement/individual_outputs/
+outputs/ulb17_vt/individual_outputs/
+outputs/waveform_images/individual_outputs/
+outputs/*.mp4
