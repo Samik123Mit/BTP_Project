@@ -2,7 +2,7 @@
 
 > A reproducible Phase 1 investigation of how image degradation affects paired optical and thermal imagery, and how classical restoration, inpainting, and neural super-resolution can recover usable visual structure for downstream feature extraction.
 
-![Real thermal severe degradation comparison](outputs/real_image_enhancement/00_thermal_severe_comparison.png)
+![Real thermal moderate degradation comparison](outputs/real_image_enhancement/00_thermal_moderate_comparison.png)
 
 ## Why this project
 
@@ -86,6 +86,21 @@ The current run uses six real RGB–thermal samples × two modalities × three d
 | Real optical image with motion degradation and every method | [open](outputs/real_image_enhancement/00_optical_motion_comparison.png) |
 | Per-image metrics | [open](outputs/real_image_enhancement/metrics_per_image.csv) |
 | Aggregate metrics | [open](outputs/real_image_enhancement/metrics_summary.csv) |
+
+### Best observed Phase 1 outcomes
+
+The best method is chosen separately for the modality and degradation—not by visual preference alone.
+
+| Case | Best evaluated method | Mean SSIM: degraded -> restored |
+|---|---|---:|
+| Optical, moderate degradation | NLM + CLAHE + unsharp | 0.841 -> 0.856 |
+| Optical, motion degradation | NLM + CLAHE + unsharp | 0.792 -> 0.817 |
+| Optical, severe degradation | NLM + CLAHE + unsharp | 0.636 -> 0.739 |
+| Thermal, moderate degradation | Conservative NLM | 0.865 -> 0.868 |
+| Thermal, motion degradation | Conservative NLM | 0.845 -> 0.848 |
+| Thermal, severe degradation | NLM + CLAHE | 0.681 -> 0.766 |
+
+The gains on moderate thermal inputs are intentionally reported as small. This is a useful finding: when an input is already structurally good, aggressive processing should not be expected to create a dramatic or trustworthy change.
 
 ## Reproducibility
 

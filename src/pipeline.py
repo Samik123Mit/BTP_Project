@@ -61,12 +61,23 @@ def restore_nlm_clahe(x: np.ndarray) -> np.ndarray:
     return _clahe(den)
 
 
+def restore_nlm_only(x: np.ndarray) -> np.ndarray:
+    """Conservative NLM denoising; avoids contrast amplification on noisy images."""
+    if x.ndim == 2:
+        return cv2.fastNlMeansDenoising(x, None, 7, 7, 21)
+    return cv2.fastNlMeansDenoisingColored(x, None, 6, 6, 7, 21)
+
+
 def restore_median_clahe(x: np.ndarray) -> np.ndarray:
     return _clahe(cv2.medianBlur(x, 3))
 
 
 def restore_bilateral_clahe(x: np.ndarray) -> np.ndarray:
     return _clahe(cv2.bilateralFilter(x, 7, 40, 40))
+
+
+def restore_bilateral_only(x: np.ndarray) -> np.ndarray:
+    return cv2.bilateralFilter(x, 7, 35, 35)
 
 
 def restore_unsharp_nlm(x: np.ndarray) -> np.ndarray:
@@ -77,6 +88,8 @@ def restore_unsharp_nlm(x: np.ndarray) -> np.ndarray:
 
 RESTORERS = {
     'bicubic_only': lambda x: x,
+    'nlm_only_conservative': restore_nlm_only,
+    'bilateral_only_conservative': restore_bilateral_only,
     'gaussian_clahe': restore_gaussian_clahe,
     'median_clahe': restore_median_clahe,
     'bilateral_clahe': restore_bilateral_clahe,
