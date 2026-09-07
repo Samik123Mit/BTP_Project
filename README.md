@@ -2,7 +2,7 @@
 
 > A reproducible Phase 1 investigation of how image degradation affects paired optical and thermal imagery, and how classical restoration, inpainting, and neural super-resolution can recover usable visual structure for downstream feature extraction.
 
-![Real thermal moderate degradation comparison](outputs/real_image_enhancement/00_thermal_moderate_comparison.png)
+![Real thermal before/after](outputs/real_image_enhancement/featured_before_after/00_thermal_severe_before_after.png)
 
 ## Why this project
 
@@ -17,6 +17,45 @@ Clean paired image  ->  controlled realistic degradation  ->  restoration altern
 ```
 
 The goal is not to claim a clinical diagnostic or material-property estimate. It is to establish a careful, repeatable enhancement baseline and demonstrate which processing choices preserve image structure.
+
+## System architecture
+
+```mermaid
+flowchart LR
+    A[Real paired source images<br/>RGB optical + thermal] --> B[Preserve clean reference]
+    B --> C[Controlled degradation engine]
+    C --> D[Degraded input image]
+    D --> E1[Classical restoration<br/>Gaussian / Median / Bilateral]
+    D --> E2[Structure-preserving restoration<br/>NLM / CLAHE / Unsharp]
+    D --> E3[Missing-area repair<br/>Telea inpainting]
+    D --> E4[Neural SR experiment<br/>EDSR x2]
+    E1 --> F[Visual comparison gallery]
+    E2 --> F
+    E3 --> F
+    E4 --> F
+    B --> G[Reference metrics<br/>PSNR / SSIM / MAE]
+    F --> G
+    G --> H[Select suitable candidate<br/>for downstream feature extraction]
+```
+
+## Experiment progression: test, observe, refine
+
+The work is structured as an investigation, not a one-shot filter application. Every stage is retained in the output gallery.
+
+```mermaid
+flowchart TD
+    S0[Stage 0: degraded baseline<br/>low resolution + blur + noise + contrast loss + holes] --> S1[Stage 1: Gaussian / Median + CLAHE]
+    S1 --> O1{Did contrast improve<br/>without magnifying noise?}
+    O1 -->|Often no| S2[Stage 2: Bilateral edge-aware filtering]
+    O1 -->|Sometimes| S3[Stage 3: NLM denoising]
+    S2 --> S3
+    S3 --> O2{Are structural metrics improved?}
+    O2 -->|Yes| S4[Stage 4: NLM + CLAHE / unsharp<br/>for severe structure loss]
+    O2 -->|No or small gain| S5[Keep conservative NLM<br/>avoid overprocessing]
+    S4 --> S6[Stage 5: separate missing-area inpainting trial]
+    S5 --> S6
+    S6 --> F[Record best method, failure cases,<br/>screenshots, and metrics]
+```
 
 ## What was implemented
 
@@ -75,6 +114,7 @@ Visual sharpness alone is never treated as proof of improvement. A method that l
 The current run uses six real RGB–thermal samples × two modalities × three degradation profiles.
 
 - **36** screenshot-ready comparison sheets
+- **36** large clean → degraded → best-restored before/after panels
 - **288** standalone clean / degraded / enhanced image outputs
 - Per-image and aggregate CSV metrics
 - Six original visible image triplets committed under `data/samples/`
@@ -86,6 +126,7 @@ The current run uses six real RGB–thermal samples × two modalities × three d
 | Real optical image with motion degradation and every method | [open](outputs/real_image_enhancement/00_optical_motion_comparison.png) |
 | Per-image metrics | [open](outputs/real_image_enhancement/metrics_per_image.csv) |
 | Aggregate metrics | [open](outputs/real_image_enhancement/metrics_summary.csv) |
+| Visual before/after gallery | [open](outputs/real_image_enhancement/featured_before_after) |
 
 ### Best observed Phase 1 outcomes
 
@@ -101,6 +142,20 @@ The best method is chosen separately for the modality and degradation—not by v
 | Thermal, severe degradation | NLM + CLAHE | 0.681 -> 0.766 |
 
 The gains on moderate thermal inputs are intentionally reported as small. This is a useful finding: when an input is already structurally good, aggressive processing should not be expected to create a dramatic or trustworthy change.
+
+### Method-by-method learning trail
+
+| Step | What was tried | Observed result | Decision captured in repository |
+|---:|---|---|---|
+| 0 | Degraded baseline only | Severe blur/noise reduces thermal SSIM to 0.681; missing blocks remain | Baseline sheet and metrics saved |
+| 1 | Gaussian+CLAHE and Median+CLAHE | More visible local contrast, but frequent noise amplification and lower fidelity in moderate thermal images | Kept as comparison, not default choice |
+| 2 | Bilateral filtering | Smoother noise with edges partly retained; performance depends on degradation type | Retained as edge-aware baseline |
+| 3 | Conservative NLM only | Best for moderate/motion thermal images: preserves signal without aggressive remapping | Preferred conservative setting for mild degradation |
+| 4 | NLM+CLAHE and NLM+unsharp | Best structural recovery under severe degradation (thermal SSIM 0.681 → 0.766; optical 0.636 → 0.739) | Featured as severe-case candidate |
+| 5 | Automatic-mask Telea inpainting | Can fill a region visually but is unable to verify original content | Explicitly reported as repair candidate, not truth recovery |
+| 6 | Pre-trained EDSR neural SR | Added as a real neural-SR experiment for waveform-image rendering | Retained as exploratory; not claimed medically validated |
+
+This progression is why the project includes methods that do not win: it documents informed elimination and shows why later choices were made.
 
 ### Selected visual evidence gallery
 

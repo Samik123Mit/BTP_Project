@@ -58,10 +58,23 @@ def draw_sheet(items, title, path):
     fig.suptitle(title,fontsize=16); fig.tight_layout(); fig.savefig(path,dpi=160,bbox_inches='tight'); plt.close(fig)
 
 
+def draw_before_after(clean, degraded, restored, title, method, path):
+    """Large presentation-ready visual: direct reference/input/best-output comparison."""
+    fig, axes = plt.subplots(1, 3, figsize=(17, 5.5))
+    for ax, (name, image) in zip(axes, [('Clean reference', clean), ('Degraded input', degraded), (f'Best restored: {method}', restored)]):
+        if image.ndim == 3:
+            ax.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+        else:
+            ax.imshow(image, cmap='inferno', vmin=0, vmax=255)
+        ax.set_title(name, fontsize=14); ax.axis('off')
+    fig.suptitle(title, fontsize=18); fig.tight_layout(); fig.savefig(path, dpi=180, bbox_inches='tight'); plt.close(fig)
+
+
 def main():
     if not SAMPLES.exists() or not list(SAMPLES.glob('*_optical_rgb.png')):
         raise FileNotFoundError('Run: python export_real_samples.py')
     OUT.mkdir(parents=True,exist_ok=True); individual=OUT/'individual_outputs'; individual.mkdir(exist_ok=True)
+    featured=OUT/'featured_before_after'; featured.mkdir(exist_ok=True)
     rows=[]
     for file in sorted(SAMPLES.glob('*_optical_rgb.png')):
         idx=file.name[:2]
@@ -78,9 +91,13 @@ def main():
                     cv2.imwrite(str(individual/f'{prefix}_{n}.png'),img)
                     rows.append({'sample':idx,'modality':modality,'degradation':profile,'method':n,'PSNR_dB':psnr(clean,img),'SSIM_global':ssim_global(clean,img),'MAE_8bit':np.abs(clean.astype(float)-img.astype(float)).mean(),'RMS_contrast':rms_contrast(img)})
                 draw_sheet([('clean_reference',clean),*variants.items()],f'Real {modality} image {idx} | {profile} degradation',OUT/f'{prefix}_comparison.png')
+                best_name, best_img = max(variants.items(), key=lambda pair: ssim_global(clean, pair[1]))
+                draw_before_after(clean, bad, best_img,
+                                  f'Real {modality} image {idx} | {profile} degradation',
+                                  best_name.replace('_', ' '), featured/f'{prefix}_before_after.png')
     pd.DataFrame(rows).to_csv(OUT/'metrics_per_image.csv',index=False)
     summary=pd.DataFrame(rows).groupby(['modality','degradation','method'],as_index=False)[['PSNR_dB','SSIM_global','MAE_8bit','RMS_contrast']].mean()
     summary.to_csv(OUT/'metrics_summary.csv',index=False)
-    print(f'Saved {len(list(OUT.glob("*_comparison.png")))} real-image comparison sheets and {len(list(individual.glob("*.png")))} individual images to {OUT}')
+    print(f'Saved {len(list(OUT.glob("*_comparison.png")))} all-method sheets, {len(list(featured.glob("*.png")))} featured before/after panels, and {len(list(individual.glob("*.png")))} individual images to {OUT}')
 
 if __name__=='__main__': main()
