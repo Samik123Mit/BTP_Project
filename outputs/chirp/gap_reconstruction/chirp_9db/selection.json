@@ -1,0 +1,7 @@
+{
+  "short_gaps": "local_pca_32",
+  "long_gaps": "autoregression",
+  "mixed_damage": "local_pca_32",
+  "severe_4x": "local_pca_8",
+  "raster_image": "local_pca_32"
+}

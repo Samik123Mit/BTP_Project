@@ -1,181 +1,173 @@
-# BTP Phase 1 — Waveform Image Enhancement and Reconstruction
+# BTP Phase 1 — Chirp Waveform Enhancement and Missing-Region Reconstruction
 
-**Primary project:** enhance blurred, noisy, low-resolution, and incomplete waveform images for later feature extraction. The intended biomedical setting provides optical and thermal waveform images without a clean reference at deployment. The current implementation and results use the supplied **Chirp HDF5 recordings**.
+This project investigates restoration of blurred, noisy, low-resolution and incomplete waveform data using the supplied Chirp recordings. The latest experiment measures **error inside erased regions**, and includes an image-input pipeline that fills missing trace columns.
 
-[Formal project write-up](PROJECT_WRITEUP.md) · [Data and reproduction guide](CHIRP_DATA_RUN.md) · [All Chirp results](outputs/chirp/)
+[Full methodology](GAP_RECONSTRUCTION.md) · [All current results](outputs/chirp/gap_reconstruction/) · [Review notebook](notebooks/chirp_gap_review.ipynb) · [Formal project write-up](PROJECT_WRITEUP.md)
 
-## Featured result: learned restoration on a real Chirp trace
+## Actual image input → estimated missing-trace fill
 
-The panel below shows the original reference, deliberately degraded input, linear interpolation baseline, and learned reconstruction for a trace excluded from training.
+![Actual Chirp image input and estimated trace filling](outputs/chirp/gap_reconstruction/chirp_9db/raster_image/best_row16925/image_before_after.png)
 
-![Chirp row 17200: reference, degraded input, interpolation, and learned restoration](outputs/chirp/learned_signal_restoration/chirp_9db/row_17200_signal_restoration.png)
+This example starts with an image rendered from a real Chirp trace. Image blur, pixel noise and erased columns are applied. The pipeline extracts the remaining blue trace from the **image pixels**, estimates missing values using a training-derived local waveform basis, and renders those estimates into the missing columns.
 
-For this example, waveform correlation increases from **0.125 to 0.931** and normalized RMSE decreases from **0.993 to 0.376**. The learned model restores much of the prominent pulse structure. The long missing intervals remain largely flat: this result demonstrates improved overall waveform agreement, not complete recovery of the erased waveform.
+The picture is a retrospectively selected best-case example. Across **all 36 Chirp test traces**, the image-input experiment reduces mean missing-region RMSE from **3.902 to 1.938 (50.3%)**. Individual outcomes vary; the full gallery includes typical and worst examples.
 
-The saved plots use separate vertical scales; compare the axis values as well as the shapes. All four evaluated rows per source, including weaker outcomes, are linked below.
+The image-input reconstruction improves gap RMSE on **33 of 36** Chirp traces; three become worse. The reported mean includes all of them.
 
-## Motivation and scope
+[Full-resolution degraded image](outputs/chirp/gap_reconstruction/chirp_9db/raster_image/best_row16925/image_input.png) · [Enhanced image](outputs/chirp/gap_reconstruction/chirp_9db/raster_image/best_row16925/image_enhanced.png) · [Reference image](outputs/chirp/gap_reconstruction/chirp_9db/raster_image/best_row16925/image_reference.png) · [Gap-error close-ups](outputs/chirp/gap_reconstruction/chirp_9db/raster_image/best_row16925/comparison.png)
 
-Blur, noise, reduced resolution, and missing regions can obscure the structure needed to trace a waveform or measure its features. The project tests whether image enhancement and signal reconstruction can make these inputs more usable.
+The current image adapter assumes known plot geometry, amplitude calibration, blue trace colour and a missing-region mask. Only missing columns are replaced in the final image; this is an estimated trace reconstruction, not recovery of the original hidden pixels. Arbitrary screenshots are not supported yet.
 
-The assigned application involves optical and thermal biomedical waveforms. The supplied Chirp files contain numerical traces; their interpretation as synchronized optical–thermal biomedical pairs has **not been established**. They currently provide a real-data test case for the restoration workflow.
+## Why this is different from the earlier results
 
-In a real deployment, the clean reference would be unavailable. For Phase 1, an original recording is retained as an experimental reference and a copy is deliberately degraded. “Reference” here means the recording before our added degradation; it is not certified noise-free ground truth.
+The earlier CNN used an 81-sample receptive field while the simulated erased spans were 180–190 samples long. At the centre of those gaps, its prediction could not depend on any observed waveform value. Whole-trace correlation improved, but the long gaps remained mostly flat.
 
-## Aim and objectives
+The new experiment:
 
-- Build a reproducible enhancement workflow for flawed waveform images.
-- Simulate resolution loss, blur, noise, weak contrast, compression, and missing regions.
-- Compare denoising, contrast correction, sharpening, inpainting, and trace interpolation.
-- Investigate learned waveform reconstruction when numerical samples are available.
-- Produce before/after images and numerical comparisons for every evaluated example.
-- Prepare for later feature extraction and validation on paired biomedical recordings.
+- Compares **18 configurations** across interpolation, autoregression, low-rank reconstruction and training-trace dictionaries.
+- Fits models on training rows and selects methods on separate validation rows.
+- Measures missing-region error separately from visible-region and whole-trace error.
+- Tests short gaps, long gaps, mixed blur/noise damage, 4× resolution loss and actual raster-image inputs.
+- Publishes all test scores, with best, median-ranked and worst visual examples.
 
-## Methodology and architecture
+The old and new scores use different masks and normalization. They are not a head-to-head comparison of the old CNN against the new methods.
 
-Two implemented branches address different inputs: a raster branch processes images rendered from the recordings; a learned branch processes the numerical waveforms directly.
+## Missing samples: reference versus prediction
+
+![Chirp short-gap reconstruction with two missing-region close-ups](outputs/chirp/gap_reconstruction/chirp_9db/short_gaps/best_row18570/comparison.png)
+
+The shaded regions were erased before inference. The zooms compare the reconstruction with the reference, which is used for scoring. This selected example has an **82.9% reduction in gap RMSE** relative to zero fill; the mean reduction over all 36 Chirp short-gap cases is **52.7%**.
+
+Full-trace panels share the same vertical scale. Dashed references in the zooms make phase and amplitude errors visible instead of relying on a sharper-looking plot.
+
+## Test results — all evaluated traces, not just the featured images
+
+Each source contributes 36 distinct test traces, reused across five conditions. Methods are selected by **mean validation gap RMSE**, not by the best-looking test output. RMSE below is measured only in erased samples, in training-normalized units; lower is better.
+
+| Source | Condition | Validation-selected method | Blank-gap RMSE | Reconstructed gap RMSE | Mean reduction |
+|---|---|---|---:|---:|---:|
+| Chirp 9 dB | Short gaps | Local PCA, rank 32 | 3.902 | 1.847 | 52.7% |
+| Chirp 9 dB | Raster-image input | Local PCA, rank 32 | 3.902 | 1.938 | 50.3% |
+| Chirp 9 dB | Blur + noise + 2× loss + gaps | Local PCA, rank 32 | 3.135 | 2.735 | 12.8% |
+| Chirp 9 dB | Severe 4× loss + gaps | Local PCA, rank 8 | 3.135 | 2.669 | 14.9% |
+| Chirp 9 dB | Long gaps | Autoregression | 2.457 | 2.454 | 0.1% |
+| AM 9 dB | Short gaps | Local PCA, rank 32 | 4.485 | 3.547 | 20.9% |
+| AM 9 dB | Raster-image input | Local PCA, rank 32 | 4.485 | 3.588 | 20.0% |
+| AM 9 dB | Blur + noise + 2× loss + gaps | Autoregression | 3.274 | 3.267 | 0.2% |
+| AM 9 dB | Severe 4× loss + gaps | Zero fill | 3.274 | 3.274 | 0.0% |
+| AM 9 dB | Long gaps | Zero fill | 2.495 | 2.495 | 0.0% |
+| V3 | Short gaps | Dictionary of 24 traces | 1.258 | 0.914 | 27.3% |
+| V3 | Raster-image input | Dictionary of 48 traces | 1.258 | 0.860 | 31.7% |
+| V3 | Blur + noise + 2× loss + gaps | Global PCA, rank 64 | 3.120 | 2.431 | 22.1% |
+| V3 | Severe 4× loss + gaps | Global PCA, rank 64 | 3.120 | 2.646 | 15.2% |
+| V3 | Long gaps | Global PCA, rank 64 | 2.526 | 2.515 | 0.4% |
+
+Negligible gains and zero-fill selections are **no demonstrated useful recovery**, not successful restoration. Long missing intervals remain unresolved in important cases.
+
+[Complete selected-method summary, including V3](outputs/chirp/gap_reconstruction/selected_test_summary.csv) · [Every validation and test measurement](outputs/chirp/gap_reconstruction/metrics.csv) · [All-method aggregate results](outputs/chirp/gap_reconstruction/summary.csv) · [Example selection and worst cases](outputs/chirp/gap_reconstruction/gallery.csv)
+
+### Another source: V3 image-input reconstruction
+
+![V3 image input with estimated missing-trace fill](outputs/chirp/gap_reconstruction/v3/raster_image/best_row16616/image_before_after.png)
+
+This source selected a training-trace dictionary rather than local PCA. The overall image-input gap-error reduction is **31.7%** across 36 V3 traces; the image shown is a selected best-case illustration.
+
+## Combined damage and resolution-loss examples
+
+### Blur, noise, 2× resolution loss and missing samples
+
+![Chirp mixed-damage reconstruction](outputs/chirp/gap_reconstruction/chirp_9db/mixed_damage/best_row18673/comparison.png)
+
+### 4× resolution loss and missing samples
+
+![Chirp severe-resolution-loss reconstruction](outputs/chirp/gap_reconstruction/chirp_9db/severe_4x/best_row16411/comparison.png)
+
+These are selected best-case illustrations. Their cohort means are in the table above. Numerical resolution recovery uses a declared degradation operator and a learned prior; increasing image dimensions alone does not establish new measured detail.
+
+## Approach and architecture
 
 ```mermaid
 flowchart TD
-    A[Supplied Chirp HDF5 recordings] --> B[Read numerical traces]
-    B --> C[Render waveform images]
-    C --> D[Lower resolution, blur, noise,<br/>contrast loss, missing regions, JPEG]
-    D --> E[Image enhancement candidates<br/>Denoising, CLAHE, sharpening,<br/>inpainting, trace interpolation]
-    E --> F[Reference / degraded / restored images<br/>Image metrics and all-method sheets]
-    B --> G[Separate training and evaluation rows]
-    G --> H[Normalize traces and simulate<br/>resolution loss, blur, noise and gaps]
-    H --> I[Train residual 1D CNN<br/>on 6000 training traces]
-    I --> J[Evaluate on four unseen rows per source<br/>Input: degraded trace and valid-sample mask]
-    J --> K[Reference / degraded / baseline / restored plots<br/>RMSE, MAE and correlation]
-    F --> L[Candidate inputs for later feature extraction]
-    K --> L
+    A[Original Chirp recordings] --> T[1800 training rows per source]
+    T --> P[Fit waveform patterns and template bank]
+    A --> V[24 separate validation rows]
+    V --> D[Controlled damage and known masks]
+    D --> C[Compare 18 configurations using gap RMSE]
+    C --> S[Save selected method]
+    A --> E[36 separate test rows]
+    E --> N[Numerical degradation]
+    E --> I[Render image, blur, add noise, erase columns]
+    I --> X[Extract visible samples from image pixels]
+    N --> R[Observed values plus missing-region mask]
+    X --> R
+    P --> R
+    S --> R
+    R --> F[Estimate missing waveform values]
+    F --> G[Gap-specific and whole-trace scoring]
+    F --> O[Re-render estimated trace into image gaps]
+    G --> H[Before/after views, zooms, CSVs and failure cases]
+    O --> H
 ```
 
-The 1D model currently requires numerical samples and a supplied missing-sample mask. Applying it directly to a supplied waveform screenshot would require an additional validated trace-extraction step.
+The low-rank methods learn recurring waveform patterns from training traces. They fit a combination of those patterns to the visible part of a damaged trace, then use the fitted combination to estimate its missing part. Dictionary methods instead combine similar training examples. Details, assumptions and the fitting equation are in [GAP_RECONSTRUCTION.md](GAP_RECONSTRUCTION.md).
 
-## Experiments and what they showed
+## What was tried
 
-| Stage | Implementation | Observation |
-|---|---|---|
-| 1. Image baseline | Render real HDF5 rows and apply mixed degradation | Creates repeatable blurry, noisy, incomplete waveform images |
-| 2. Filtering | Gaussian, median, bilateral and Non-Local Means (NLM) | Tests smoothing against preservation of thin waveform detail |
-| 3. Contrast and sharpening | CLAHE combinations and unsharp masking | NLM + CLAHE + unsharp gives the highest mean image SSIM among tested methods for AM and Chirp |
-| 4. Image gap repair | Mask-assisted Telea inpainting and image-trace interpolation | Produces repair candidates; image similarity alone does not verify the missing signal |
-| 5. Numerical baseline | Linear interpolation across known gaps | Similar overall error to the degraded signal in the measured runs |
-| 6. Learned reconstruction | Residual 1D convolutional neural network (CNN) | Improves overall waveform RMSE and correlation on the evaluated rows; long gaps remain a limitation |
+| Family | Tested variants |
+|---|---|
+| Simple baselines | Zero fill, linear interpolation, PCHIP interpolation |
+| Local signal prediction | Bidirectional autoregression |
+| Global waveform basis | Five PCA rank/regularization settings |
+| Global template fitting | One template; dictionaries of 8, 24 and 48 traces |
+| Local waveform basis | PCA ranks 8, 16 and 32 |
+| Local template fitting | Dictionaries of 8 and 24 traces |
 
-Increasing pixel dimensions through interpolation is part of the image baseline. The learned branch uses 4× downsampled/upsampled signals during corruption; it predicts a signal on the original sample grid. Dedicated neural image super-resolution on Chirp images remains future work.
+[All configurations on the same fixed Chirp test row](outputs/chirp/gap_reconstruction/chirp_9db/short_gaps/all_methods_row16000.png)
 
-## Image enhancement: before and after
+The earlier Gaussian/median/bilateral/NLM filters, CLAHE, sharpening, inpainting and CNN work remain documented in [CHIRP_INITIAL_EXPERIMENTS.md](CHIRP_INITIAL_EXPERIMENTS.md).
 
-Each panel shows **original rendered waveform → degraded image → highest-SSIM tested restoration**. Selection uses the experimental reference, so these panels are retrospective comparisons rather than an automatic method-selection solution for reference-free deployment.
-
-### Chirp 9 dB — row 5000
-
-![Chirp image enhancement before and after](outputs/chirp/raster_enhancement/featured_before_after/chirp_9db_row5000_before_after.png)
-
-### AM 9 dB — row 5000
-
-![AM image enhancement before and after](outputs/chirp/raster_enhancement/featured_before_after/am_9db_row5000_before_after.png)
-
-### V3 — row 5000
-
-![V3 image enhancement before and after](outputs/chirp/raster_enhancement/featured_before_after/reference_v3_row5000_before_after.png)
-
-The image benchmark evaluates rows `500` and `5000` from each file:
-
-| Source | Mean degraded image SSIM | Best tested method by mean SSIM | Mean restored image SSIM |
-|---|---:|---|---:|
-| AM 9 dB | 0.649 | NLM + CLAHE + unsharp | 0.739 |
-| Chirp 9 dB | 0.657 | NLM + CLAHE + unsharp | 0.736 |
-| V3 | 0.611 | Mask-assisted Telea inpainting | 0.718 |
-
-This code uses a **global SSIM calculation** in `src/pipeline.py`. Image scores include plot backgrounds and labels; they do not measure only the trace or the erased regions.
-
-[All six before/after panels](outputs/chirp/raster_enhancement/featured_before_after/) · [Every method on every example](outputs/chirp/raster_enhancement/all_methods/) · [Per-waveform metrics](outputs/chirp/raster_enhancement/metrics_per_waveform.csv) · [Aggregate image metrics](outputs/chirp/raster_enhancement/metrics_summary.csv)
-
-## Learned reconstruction: results across every evaluated row
-
-Each source has a separate model trained on 6,000 rows sampled from indices `0–14999`. Evaluation uses rows `16000`, `17200`, `18400`, and `19500` from the same file. This is a row holdout, not a subject or recording holdout.
-
-The following values are averages across all four evaluated traces per source. RMSE measures sample error (lower is better); correlation measures waveform agreement (higher is better). RMSE is in normalized signal units.
-
-| Source | Method | Mean RMSE ↓ | Mean correlation ↑ |
-|---|---|---:|---:|
-| Chirp 9 dB | Degraded input | 0.991 | 0.131 |
-| Chirp 9 dB | Linear gap interpolation | 0.992 | 0.128 |
-| Chirp 9 dB | Learned residual CNN | **0.507** | **0.852** |
-| AM 9 dB | Degraded input | 0.971 | 0.238 |
-| AM 9 dB | Linear gap interpolation | 0.972 | 0.233 |
-| AM 9 dB | Learned residual CNN | **0.691** | **0.720** |
-
-These are whole-trace metrics. They do not establish accurate reconstruction inside each missing interval. The benchmark normalizes each original trace before generating its corrupted copy and supplies the synthetic gap mask. Testing normalization from observed samples and automatically finding gaps are still needed for naturally degraded inputs.
-
-### Another Chirp example — row 19500
-
-![Chirp row 19500 learned restoration](outputs/chirp/learned_signal_restoration/chirp_9db/row_19500_signal_restoration.png)
-
-### AM example — row 17200
-
-![AM row 17200 learned restoration](outputs/chirp/learned_signal_restoration/am_9db/row_17200_signal_restoration.png)
-
-| Evaluated row | Chirp 9 dB result | AM 9 dB result |
-|---|---|---|
-| 16000 | [View](outputs/chirp/learned_signal_restoration/chirp_9db/row_16000_signal_restoration.png) | [View](outputs/chirp/learned_signal_restoration/am_9db/row_16000_signal_restoration.png) |
-| 17200 | [View](outputs/chirp/learned_signal_restoration/chirp_9db/row_17200_signal_restoration.png) | [View](outputs/chirp/learned_signal_restoration/am_9db/row_17200_signal_restoration.png) |
-| 18400 | [View](outputs/chirp/learned_signal_restoration/chirp_9db/row_18400_signal_restoration.png) | [View](outputs/chirp/learned_signal_restoration/am_9db/row_18400_signal_restoration.png) |
-| 19500 | [View](outputs/chirp/learned_signal_restoration/chirp_9db/row_19500_signal_restoration.png) | [View](outputs/chirp/learned_signal_restoration/am_9db/row_19500_signal_restoration.png) |
-
-[Chirp numerical results](outputs/chirp/learned_signal_restoration/chirp_9db/heldout_metrics.csv) · [AM numerical results](outputs/chirp/learned_signal_restoration/am_9db/heldout_metrics.csv)
-
-## How the learned method works
-
-The network receives two channels: the corrupted waveform and a mask marking observed samples. Five convolutional layers learn a correction that is added to the input. Training compares the prediction with the original training trace, weighting missing samples four times as heavily as visible samples.
-
-The implementation uses 14 epochs, batches of 64, AdamW with learning rate `0.002`, and random seed `29`. The model receives no evaluation target in its forward pass. Full details are in [run_chirp_learned_restoration.py](run_chirp_learned_restoration.py).
-
-## Run on a laptop
-
-Run these commands from the repository root:
+## Reproduce on a laptop
 
 ```powershell
-python -m pip install -r requirements.txt
-python run_chirp_enhancement.py
-python run_chirp_learned_restoration.py --source chirp_9db
-python run_chirp_learned_restoration.py --source am_9db
+python -m pip install -r requirements-gap.txt
+python -m unittest discover -s tests -v
+python run_chirp_gap_benchmark.py --data-root "C:\Users\DELL\Desktop\hs lit theiory\Chirp data"
+python render_chirp_gap_report.py
+python verify_chirp_gap_results.py
 ```
 
-Both scripts currently read data from `C:\Users\DELL\Desktop\hs lit theiory\Chirp data`. On another machine, set `DATA_ROOT` near the top of each script to the folder containing the three HDF5 files. The raw files are local inputs and are not included in this repository.
+Use your own data-folder path after `--data-root`. The three original HDF5 files remain local inputs. This CPU pipeline uses no PyTorch and does not modify the recordings.
 
-Re-running writes results to `Chirp_enhancement_results` inside that data folder. The figures and CSVs under `outputs/chirp/` are committed snapshots of the existing runs, available to browse without the raw data. Training also saves a model checkpoint locally.
+The pinned environment was run with Python 3.14. For a notebook interface, install `notebook` and run `python -m notebook notebooks/chirp_gap_review.ipynb`.
 
-The learned runner supports `--source v3`; a V3 learned run is not included in the current evidence. Its raster image results are included above.
+To inspect the published results without the raw files:
 
-## Project layout
+- Open the [review notebook](notebooks/chirp_gap_review.ipynb); its optional rerun is off by default.
+- Download and open [the HTML gallery](outputs/chirp/gap_reconstruction/index.html) locally.
+- Browse the PNG images and CSV files directly on GitHub.
+
+The result folder includes full numerical prediction arrays, masks, split indices, code/training checksums and saved validation choices. All figure generation can be repeated from those saved predictions.
+
+## Current evidence and limits
+
+The benchmark contains 108 distinct test traces, 540 trace/condition cases and 9,720 test-method measurements. The report provides 45 best/median/worst comparison panels, 15 fixed-row all-method sheets, and nine raster-image before/after views with separate original/input/enhanced PNGs.
+
+The recordings have not been established as synchronized optical–thermal biomedical pairs. This is a within-recording, controlled-degradation experiment with known masks; it does not validate unseen subjects, arbitrary screenshots, unknown blur, or complete long-gap recovery.
+
+The intended next stage is to evaluate varied gap positions and unseen recordings, then assess downstream feature accuracy. Density and Young's modulus require additional physical modelling, calibration and independent measurements; this project does not currently estimate them.
+
+## Repository layout
 
 ```text
-README.md                         Primary project, visuals and results
-PROJECT_WRITEUP.md                Title, motivation, objectives and methodology
-CHIRP_DATA_RUN.md                 Dataset details and reproduction guide
-run_chirp_enhancement.py          Chirp waveform-image experiments
-run_chirp_learned_restoration.py  Numerical waveform reconstruction
-src/pipeline.py                   Shared classical methods and image metrics
-outputs/chirp/                   Published Chirp figures and CSV results
-requirements.txt                 Shared Python dependencies
-additional_experiments/
-  optical_thermal_benchmark/     Earlier work outside the assigned task
+run_chirp_gap_benchmark.py         Fit, validate and evaluate current methods
+render_chirp_gap_report.py         Rebuild figures and local HTML gallery
+src/chirp_gap.py                   Mask-aware numerical restoration
+src/chirp_raster.py                Calibrated image input and trace extraction
+tests/test_chirp_gap.py            Reconstruction and data-isolation checks
+verify_chirp_gap_results.py        Independent saved-result and selection audit
+notebooks/chirp_gap_review.ipynb   Review and optional full rerun
+outputs/chirp/gap_reconstruction/  Current results, predictions and figures
+GAP_RECONSTRUCTION.md              Detailed methodology and limitations
+CHIRP_INITIAL_EXPERIMENTS.md        Earlier Chirp filters and short-context CNN
+additional_experiments/           Earlier optical–thermal exploratory work
 ```
-
-## Next steps toward the intended application
-
-- Evaluate longer and differently positioned gaps with separate masked-region metrics.
-- Test on unseen recordings and naturally degraded signals.
-- Validate trace extraction when only an image is available.
-- Obtain synchronized optical–thermal biomedical data and evaluate both modalities.
-- Measure whether enhancement improves downstream waveform feature accuracy.
-
-Density and Young's modulus remain downstream research goals. Estimating them requires a suitable physical model, calibration, and independent measurements; the current enhancement pipeline does not calculate these properties.
-
-## Additional exploratory work
-
-The earlier RGB–thermal benchmark and synthetic optical/thermal waveform demos are preserved in [additional_experiments/optical_thermal_benchmark/](additional_experiments/optical_thermal_benchmark/). They are additional experiments outside the assigned task, with their original methods, data samples, notebook, and result galleries.

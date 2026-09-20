@@ -1,0 +1,4 @@
+# Keep benchmark source checksums stable across Windows/Linux checkouts.
+*.py text eol=lf
+*.npz binary
+*.png binary

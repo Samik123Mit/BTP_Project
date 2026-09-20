@@ -16,3 +16,4 @@ additional_experiments/optical_thermal_benchmark/outputs/real_image_enhancement/
 additional_experiments/optical_thermal_benchmark/outputs/ulb17_vt/individual_outputs/
 additional_experiments/optical_thermal_benchmark/outputs/waveform_images/individual_outputs/
 additional_experiments/optical_thermal_benchmark/outputs/*.mp4
+outputs/chirp/local_gap_rerun/

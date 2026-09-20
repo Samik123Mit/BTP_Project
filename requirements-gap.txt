@@ -1,0 +1,7 @@
+# Versions used for the gap benchmark (CPU; no PyTorch required).
+numpy==2.3.5
+scipy==1.17.1
+opencv-contrib-python==5.0.0.93
+matplotlib==3.10.8
+pandas==2.3.3
+h5py==3.16.0

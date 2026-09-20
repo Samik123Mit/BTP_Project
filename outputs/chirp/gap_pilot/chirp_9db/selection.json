@@ -1,0 +1,6 @@
+{
+  "short_gaps": "dictionary_24",
+  "long_gaps": "zero_fill",
+  "mixed_damage": "dictionary_24",
+  "severe_4x": "pca_r64_l1"
+}

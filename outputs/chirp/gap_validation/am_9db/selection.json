@@ -1,0 +1,6 @@
+{
+  "short_gaps": "local_pca_32",
+  "long_gaps": "zero_fill",
+  "mixed_damage": "autoregression",
+  "severe_4x": "zero_fill"
+}

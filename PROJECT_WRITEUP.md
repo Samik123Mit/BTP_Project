@@ -4,6 +4,8 @@
 
 This is the **primary assigned project**. The current implementation uses the supplied Chirp HDF5 recordings as a real-data restoration test case. The earlier RGB–thermal benchmark and synthetic waveform demos are [additional exploratory work](additional_experiments/optical_thermal_benchmark/README.md), outside the assigned task.
 
+The latest extension specifically evaluates missing-region recovery using 18 configurations, separate validation rows, and a direct image-input experiment. See [GAP_RECONSTRUCTION.md](GAP_RECONSTRUCTION.md) for its protocol and the [main README](README.md) for the current visual results. The earlier image-filter and CNN experiments are retained as development evidence.
+
 ## Motivation / Background
 
 Optical and thermal waveform images are increasingly relevant to non-contact biomedical monitoring. They can carry useful physiological and structural information, but real acquisitions may suffer from low sensor resolution, blur, noise, low contrast, compression artifacts, occlusion, and missing image regions. In the intended deployment setting, a corresponding clean ground-truth image is not available.
@@ -46,10 +48,12 @@ flowchart TD
     D --> E2[Resolution baseline<br/>downsampling and bicubic expansion]
     D --> E3[Missing-data repair<br/>Telea inpainting / trace interpolation]
     A --> E4[Separate numerical branch: residual 1D CNN<br/>6000 training rows; four evaluation rows per source]
+    A --> E5[Gap-focused extension: masked low-rank and dictionary fits<br/>1800 training / 24 validation / 36 test rows per source]
     E1 --> F[Before / after comparison]
     E2 --> F
     E3 --> F
     E4 --> F
+    E5 --> F
     B --> G[Reference metrics<br/>PSNR, SSIM, MAE, RMSE, correlation]
     F --> G
     G --> H[Method selection]
@@ -90,6 +94,10 @@ flowchart TD
 
 ## Current Phase 1 Work Completed
 
+The dedicated gap benchmark adds short gaps, long gaps, mixed numerical damage, severe resolution loss and calibrated raster-image inputs. It measures error inside missing intervals separately from whole-trace error. For the raster condition, visible samples are extracted from actual corrupted pixels before restoration. The adapter assumes known trace colour, geometry, amplitude calibration and mask.
+
+The 36 test rows per source are reused across conditions; this remains a within-recording evaluation. Method selection uses validation gap RMSE. A zero-fill winner or negligible improvement is reported as no demonstrated recovery. The earlier experiments below are still part of the completed work.
+
 | Work package | Current implementation |
 |---|---|
 | Chirp HDF5 data adaptation | Three recordings; rows 500 and 5000 from each rendered as images, degraded, restored, and scored |
@@ -100,7 +108,7 @@ flowchart TD
 
 The [main README](README.md) presents the visual results. EDSR and the earlier RGB–thermal and synthetic-waveform benchmarks are documented separately as additional work; they are not results of the current Chirp implementation.
 
-### Held-out reconstruction evidence
+### Earlier CNN reconstruction evidence
 
 The learned waveform-restoration experiment uses non-overlapping rows: 6,000 traces sampled from rows `0–14999` are used for training and four rows (`16000`, `17200`, `18400`, `19500`) are reserved for evaluation. This split is within each file, not across subjects or recordings. Original traces are normalized before synthetic corruption; their normalized references are used for scoring, but are not model inputs during prediction.
 
@@ -126,7 +134,7 @@ There are two different recovery problems:
 - Split data by subject/recording before model selection to prevent leakage.
 - Train modality-aware restoration models only on training data.
 - Evaluate restoration on held-out subjects and naturally degraded samples.
-- Measure masked-region error separately and test normalization using only observed samples.
+- Extend the new gap-specific evaluation to unseen recordings, unknown masks and varied gap locations.
 - Quantify the impact of restoration on downstream feature extraction.
 - Pair images with independent density, elastography, or mechanical-test data before attempting density or Young’s-modulus inference.
 

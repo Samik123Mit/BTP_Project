@@ -2,6 +2,20 @@
 
 This is the data and reproduction guide for the **primary project**. See the [main README](README.md) for visuals and results and [PROJECT_WRITEUP.md](PROJECT_WRITEUP.md) for the formal problem statement. Earlier optical–thermal experiments are preserved as [additional work](additional_experiments/optical_thermal_benchmark/README.md), outside the assigned task.
 
+## Current gap-reconstruction benchmark
+
+The latest experiment directly measures recovery inside missing regions and includes an actual raster-image input path. Its full protocol is in [GAP_RECONSTRUCTION.md](GAP_RECONSTRUCTION.md).
+
+```powershell
+python -m pip install -r requirements-gap.txt
+python run_chirp_gap_benchmark.py --data-root "C:\Users\DELL\Desktop\hs lit theiory\Chirp data"
+python render_chirp_gap_report.py
+```
+
+Results are written to `outputs/chirp/gap_reconstruction/` in the repository, including numerical predictions, CSV measurements, gap close-ups, all-method sheets and a local HTML gallery. The [review notebook](notebooks/chirp_gap_review.ipynb) can display committed evidence without access to the original HDF5 files.
+
+The following sections document the earlier image-filter and short-context CNN experiments, which remain available for comparison.
+
 This document describes the run against the local data placed at:
 
 ```text
