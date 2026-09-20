@@ -252,6 +252,16 @@ clean reference | degraded input | conservative methods | contrast methods | inp
 | `$env:RUN_EDSR_ALL=1; python run_waveform_image_benchmark.py` | EDSR neural SR on every waveform example; slower on CPU |
 | `python export_real_samples.py` | Rebuilds the visible six-image source subset from downloaded archive |
 
+## Running on external Chirp HDF5 recordings
+
+The repository also contains a data-specific runner for the supplied Chirp recordings at `C:\Users\DELL\Desktop\hs lit theiory\Chirp data`. It renders real HDF5 traces as waveform images, creates blurred/noisy/missing versions, then writes clean → degraded → best-restored comparisons next to the supplied data.
+
+```powershell
+python run_chirp_enhancement.py
+```
+
+See [CHIRP_DATA_RUN.md](CHIRP_DATA_RUN.md) for source-file shapes, methods, results, and output locations.
+
 ## Extension to biomedical feature extraction
 
 Phase 1 deliberately stops before making biomedical-property claims. A validated Phase 2 would use paired biomedical acquisition and independent reference values:
