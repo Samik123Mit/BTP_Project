@@ -4,6 +4,10 @@
 
 ![Real thermal before/after](outputs/real_image_enhancement/featured_before_after/00_thermal_severe_before_after.png)
 
+## Project write-up
+
+For the formal problem statement, motivation, objectives, methodology flowchart, completed work, technical insight, and proposed next phase, see **[PROJECT_WRITEUP.md](PROJECT_WRITEUP.md)**.
+
 ## Why this project
 
 Biomedical optical and thermal images may be affected by limited sensor resolution, defocus or motion blur, low contrast, sensor noise, compression, and incomplete image regions. These effects can make later tasks—region identification, boundary detection, temperature-pattern analysis, waveform tracing, and feature extraction—less reliable.
