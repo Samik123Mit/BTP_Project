@@ -2,7 +2,9 @@
 
 ## Included material
 
-The repository contains code and generated figures from a **synthetic** paired optical–thermal clip. No patient image, thermal measurement, or biometric record is bundled.
+This document covers [additional exploratory work](README.md), outside the assigned task. See the [main project](../../README.md) for the current scope.
+
+This folder contains the original **synthetic** paired optical–thermal clip experiment and the later ULB17-VT image samples and benchmark figures described in its [README](README.md). The dataset discussion below records the original proposed biomedical extension; it does not describe the current Chirp inputs.
 
 ## Proposed external dataset
 

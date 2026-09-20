@@ -2,6 +2,8 @@
 
 ## The one-sentence project
 
+This is the historical guide for the additional optical–thermal demos, outside the assigned task. The current assigned project is documented in the [main README](../../README.md) and [Chirp run guide](../../CHIRP_DATA_RUN.md).
+
 â€œI am testing whether restoration of blurry/noisy optical and thermal images keeps the **scientifically useful signal** more reliable, not merely whether the image looks sharper.â€
 
 ## The problem in everyday language
@@ -58,8 +60,8 @@ Compare with hidden clean reference + plot the waveform from the same ROI
 
 ## Exactly what to click/run in a meeting
 
-1. Open PowerShell in this repository.
-2. Run `python -m pip install -r requirements.txt` once.
+1. Open PowerShell in `additional_experiments/optical_thermal_benchmark`.
+2. Run `python -m pip install -r ../../requirements.txt` once.
 3. Run `python run_demo.py`.
 4. Open `outputs/optical_comparison.png`, then `outputs/thermal_comparison.png`.
 5. Open `outputs/waveform_comparison.png` and `outputs/metrics.csv`.

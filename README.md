@@ -1,376 +1,181 @@
-# BTP Phase 1 — Optical–Thermal Image Restoration Benchmark
+# BTP Phase 1 — Waveform Image Enhancement and Reconstruction
 
-> A reproducible Phase 1 investigation of how image degradation affects paired optical and thermal imagery, and how classical restoration, inpainting, and neural super-resolution can recover usable visual structure for downstream feature extraction.
+**Primary project:** enhance blurred, noisy, low-resolution, and incomplete waveform images for later feature extraction. The intended biomedical setting provides optical and thermal waveform images without a clean reference at deployment. The current implementation and results use the supplied **Chirp HDF5 recordings**.
 
-![Real thermal before/after](outputs/real_image_enhancement/featured_before_after/00_thermal_severe_before_after.png)
+[Formal project write-up](PROJECT_WRITEUP.md) · [Data and reproduction guide](CHIRP_DATA_RUN.md) · [All Chirp results](outputs/chirp/)
 
-## Project write-up
+## Featured result: learned restoration on a real Chirp trace
 
-For the formal problem statement, motivation, objectives, methodology flowchart, completed work, technical insight, and proposed next phase, see **[PROJECT_WRITEUP.md](PROJECT_WRITEUP.md)**.
+The panel below shows the original reference, deliberately degraded input, linear interpolation baseline, and learned reconstruction for a trace excluded from training.
 
-## Why this project
+![Chirp row 17200: reference, degraded input, interpolation, and learned restoration](outputs/chirp/learned_signal_restoration/chirp_9db/row_17200_signal_restoration.png)
 
-Biomedical optical and thermal images may be affected by limited sensor resolution, defocus or motion blur, low contrast, sensor noise, compression, and incomplete image regions. These effects can make later tasks—region identification, boundary detection, temperature-pattern analysis, waveform tracing, and feature extraction—less reliable.
+For this example, waveform correlation increases from **0.125 to 0.931** and normalized RMSE decreases from **0.993 to 0.376**. The learned model restores much of the prominent pulse structure. The long missing intervals remain largely flat: this result demonstrates improved overall waveform agreement, not complete recovery of the erased waveform.
 
-This Phase 1 work addresses the **image-quality layer** first:
+The saved plots use separate vertical scales; compare the axis values as well as the shapes. All four evaluated rows per source, including weaker outcomes, are linked below.
 
-```text
-Clean paired image  ->  controlled realistic degradation  ->  restoration alternatives
-                                                         ->  visual + objective comparison
-                                                         ->  candidate input for later feature extraction
-```
+## Motivation and scope
 
-The goal is not to claim a clinical diagnostic or material-property estimate. It is to establish a careful, repeatable enhancement baseline and demonstrate which processing choices preserve image structure.
+Blur, noise, reduced resolution, and missing regions can obscure the structure needed to trace a waveform or measure its features. The project tests whether image enhancement and signal reconstruction can make these inputs more usable.
 
-## System architecture
+The assigned application involves optical and thermal biomedical waveforms. The supplied Chirp files contain numerical traces; their interpretation as synchronized optical–thermal biomedical pairs has **not been established**. They currently provide a real-data test case for the restoration workflow.
 
-```mermaid
-flowchart LR
-    A[Real paired source images<br/>RGB optical + thermal] --> B[Preserve clean reference]
-    B --> C[Controlled degradation engine]
-    C --> D[Degraded input image]
-    D --> E1[Classical restoration<br/>Gaussian / Median / Bilateral]
-    D --> E2[Structure-preserving restoration<br/>NLM / CLAHE / Unsharp]
-    D --> E3[Missing-area repair<br/>Telea inpainting]
-    D --> E4[Neural SR experiment<br/>EDSR x2]
-    E1 --> F[Visual comparison gallery]
-    E2 --> F
-    E3 --> F
-    E4 --> F
-    B --> G[Reference metrics<br/>PSNR / SSIM / MAE]
-    F --> G
-    G --> H[Select suitable candidate<br/>for downstream feature extraction]
-```
+In a real deployment, the clean reference would be unavailable. For Phase 1, an original recording is retained as an experimental reference and a copy is deliberately degraded. “Reference” here means the recording before our added degradation; it is not certified noise-free ground truth.
 
-## Experiment progression: test, observe, refine
+## Aim and objectives
 
-The work is structured as an investigation, not a one-shot filter application. Every stage is retained in the output gallery.
+- Build a reproducible enhancement workflow for flawed waveform images.
+- Simulate resolution loss, blur, noise, weak contrast, compression, and missing regions.
+- Compare denoising, contrast correction, sharpening, inpainting, and trace interpolation.
+- Investigate learned waveform reconstruction when numerical samples are available.
+- Produce before/after images and numerical comparisons for every evaluated example.
+- Prepare for later feature extraction and validation on paired biomedical recordings.
+
+## Methodology and architecture
+
+Two implemented branches address different inputs: a raster branch processes images rendered from the recordings; a learned branch processes the numerical waveforms directly.
 
 ```mermaid
 flowchart TD
-    S0[Stage 0: degraded baseline<br/>low resolution + blur + noise + contrast loss + holes] --> S1[Stage 1: Gaussian / Median + CLAHE]
-    S1 --> O1{Did contrast improve<br/>without magnifying noise?}
-    O1 -->|Often no| S2[Stage 2: Bilateral edge-aware filtering]
-    O1 -->|Sometimes| S3[Stage 3: NLM denoising]
-    S2 --> S3
-    S3 --> O2{Are structural metrics improved?}
-    O2 -->|Yes| S4[Stage 4: NLM + CLAHE / unsharp<br/>for severe structure loss]
-    O2 -->|No or small gain| S5[Keep conservative NLM<br/>avoid overprocessing]
-    S4 --> S6[Stage 5: separate missing-area inpainting trial]
-    S5 --> S6
-    S6 --> F[Record best method, failure cases,<br/>screenshots, and metrics]
+    A[Supplied Chirp HDF5 recordings] --> B[Read numerical traces]
+    B --> C[Render waveform images]
+    C --> D[Lower resolution, blur, noise,<br/>contrast loss, missing regions, JPEG]
+    D --> E[Image enhancement candidates<br/>Denoising, CLAHE, sharpening,<br/>inpainting, trace interpolation]
+    E --> F[Reference / degraded / restored images<br/>Image metrics and all-method sheets]
+    B --> G[Separate training and evaluation rows]
+    G --> H[Normalize traces and simulate<br/>resolution loss, blur, noise and gaps]
+    H --> I[Train residual 1D CNN<br/>on 6000 training traces]
+    I --> J[Evaluate on four unseen rows per source<br/>Input: degraded trace and valid-sample mask]
+    J --> K[Reference / degraded / baseline / restored plots<br/>RMSE, MAE and correlation]
+    F --> L[Candidate inputs for later feature extraction]
+    K --> L
 ```
 
-## What was implemented
+The 1D model currently requires numerical samples and a supplied missing-sample mask. Applying it directly to a supplied waveform screenshot would require an additional validated trace-extraction step.
 
-### 1. Real paired optical–thermal data
+## Experiments and what they showed
 
-The benchmark uses the public **ULB17-VT** dataset. Every selected example contains an aligned optical RGB image, a high-resolution thermal image (320×240), and a low-resolution thermal image (80×60). The repository includes a compact visible subset of six real aligned image triplets under `data/samples/ulb17_vt_test/`; the 512 MB original download is intentionally excluded from Git.
-
-Dataset: [ULB17-VT on Zenodo](https://doi.org/10.5281/zenodo.2557535) · Related work: Almasri & Debeir, *Multimodal Sensor Fusion in Single Thermal Image Super-Resolution* (2018).
-
-### 2. Controlled degradation suite
-
-Each clean image is transformed into several reproducible failure cases.
-
-| Degradation | Simulated failure |
-|---|---|
-| Resolution reduction | Low-resolution sensor acquisition / undersampling |
-| Gaussian blur | Defocus and optical blur |
-| Motion blur | Motion or camera shake |
-| Contrast reduction | Weak thermal/optical separation |
-| Additive noise | Sensor noise |
-| JPEG compression | Transmission or storage artifacts |
-| Missing patches | Occlusion, dropped pixels, or incomplete acquisition |
-
-Three profiles are run on every real image: `moderate`, `severe`, and `motion`.
-
-### 3. Broad restoration comparison
-
-No single method is assumed to be best. All results are retained, including those that underperform.
-
-| Family | Methods implemented | Purpose |
+| Stage | Implementation | Observation |
 |---|---|---|
-| Baseline | Bicubic interpolation | Reference for low-resolution upscaling |
-| Denoising + local contrast | Gaussian+CLAHE, Median+CLAHE, NLM+CLAHE | Reduce noise and reveal local structure |
-| Edge-aware processing | Bilateral+CLAHE, NLM+CLAHE+unsharp mask | Retain / emphasize boundaries |
-| Missing-data repair | Automatic-mask Telea inpainting | Fill detected missing regions |
-| Neural super-resolution | Pre-trained EDSR ×2 | Exploratory deep-learning super-resolution comparison |
-| Waveform-specific recovery | Blind trace interpolation | Recover a missing plotted trace from neighbouring visible trace points |
+| 1. Image baseline | Render real HDF5 rows and apply mixed degradation | Creates repeatable blurry, noisy, incomplete waveform images |
+| 2. Filtering | Gaussian, median, bilateral and Non-Local Means (NLM) | Tests smoothing against preservation of thin waveform detail |
+| 3. Contrast and sharpening | CLAHE combinations and unsharp masking | NLM + CLAHE + unsharp gives the highest mean image SSIM among tested methods for AM and Chirp |
+| 4. Image gap repair | Mask-assisted Telea inpainting and image-trace interpolation | Produces repair candidates; image similarity alone does not verify the missing signal |
+| 5. Numerical baseline | Linear interpolation across known gaps | Similar overall error to the degraded signal in the measured runs |
+| 6. Learned reconstruction | Residual 1D convolutional neural network (CNN) | Improves overall waveform RMSE and correlation on the evaluated rows; long gaps remain a limitation |
 
-`CLAHE` is Contrast Limited Adaptive Histogram Equalization. `NLM` is Non-Local Means denoising. `EDSR` is a real pre-trained residual neural super-resolution model; it is **not** a GAN and is labelled exploratory because it was trained on generic natural images, not biomedical images.
+Increasing pixel dimensions through interpolation is part of the image baseline. The learned branch uses 4× downsampled/upsampled signals during corruption; it predicts a signal on the original sample grid. Dedicated neural image super-resolution on Chirp images remains future work.
 
-### 4. Quantitative evaluation
+## Image enhancement: before and after
 
-Because the clean image is retained before degradation, every restoration can be objectively scored.
+Each panel shows **original rendered waveform → degraded image → highest-SSIM tested restoration**. Selection uses the experimental reference, so these panels are retrospective comparisons rather than an automatic method-selection solution for reference-free deployment.
 
-| Metric | Meaning | Better result |
+### Chirp 9 dB — row 5000
+
+![Chirp image enhancement before and after](outputs/chirp/raster_enhancement/featured_before_after/chirp_9db_row5000_before_after.png)
+
+### AM 9 dB — row 5000
+
+![AM image enhancement before and after](outputs/chirp/raster_enhancement/featured_before_after/am_9db_row5000_before_after.png)
+
+### V3 — row 5000
+
+![V3 image enhancement before and after](outputs/chirp/raster_enhancement/featured_before_after/reference_v3_row5000_before_after.png)
+
+The image benchmark evaluates rows `500` and `5000` from each file:
+
+| Source | Mean degraded image SSIM | Best tested method by mean SSIM | Mean restored image SSIM |
+|---|---:|---|---:|
+| AM 9 dB | 0.649 | NLM + CLAHE + unsharp | 0.739 |
+| Chirp 9 dB | 0.657 | NLM + CLAHE + unsharp | 0.736 |
+| V3 | 0.611 | Mask-assisted Telea inpainting | 0.718 |
+
+This code uses a **global SSIM calculation** in `src/pipeline.py`. Image scores include plot backgrounds and labels; they do not measure only the trace or the erased regions.
+
+[All six before/after panels](outputs/chirp/raster_enhancement/featured_before_after/) · [Every method on every example](outputs/chirp/raster_enhancement/all_methods/) · [Per-waveform metrics](outputs/chirp/raster_enhancement/metrics_per_waveform.csv) · [Aggregate image metrics](outputs/chirp/raster_enhancement/metrics_summary.csv)
+
+## Learned reconstruction: results across every evaluated row
+
+Each source has a separate model trained on 6,000 rows sampled from indices `0–14999`. Evaluation uses rows `16000`, `17200`, `18400`, and `19500` from the same file. This is a row holdout, not a subject or recording holdout.
+
+The following values are averages across all four evaluated traces per source. RMSE measures sample error (lower is better); correlation measures waveform agreement (higher is better). RMSE is in normalized signal units.
+
+| Source | Method | Mean RMSE ↓ | Mean correlation ↑ |
+|---|---|---:|---:|
+| Chirp 9 dB | Degraded input | 0.991 | 0.131 |
+| Chirp 9 dB | Linear gap interpolation | 0.992 | 0.128 |
+| Chirp 9 dB | Learned residual CNN | **0.507** | **0.852** |
+| AM 9 dB | Degraded input | 0.971 | 0.238 |
+| AM 9 dB | Linear gap interpolation | 0.972 | 0.233 |
+| AM 9 dB | Learned residual CNN | **0.691** | **0.720** |
+
+These are whole-trace metrics. They do not establish accurate reconstruction inside each missing interval. The benchmark normalizes each original trace before generating its corrupted copy and supplies the synthetic gap mask. Testing normalization from observed samples and automatically finding gaps are still needed for naturally degraded inputs.
+
+### Another Chirp example — row 19500
+
+![Chirp row 19500 learned restoration](outputs/chirp/learned_signal_restoration/chirp_9db/row_19500_signal_restoration.png)
+
+### AM example — row 17200
+
+![AM row 17200 learned restoration](outputs/chirp/learned_signal_restoration/am_9db/row_17200_signal_restoration.png)
+
+| Evaluated row | Chirp 9 dB result | AM 9 dB result |
 |---|---|---|
-| PSNR | Pixel-level closeness to the clean reference | Higher |
-| SSIM | Brightness, contrast, and structural similarity (0–1) | Higher |
-| MAE | Mean absolute pixel error | Lower |
-| RMS contrast | Visible intensity variation | Context-dependent; higher can mean noise |
+| 16000 | [View](outputs/chirp/learned_signal_restoration/chirp_9db/row_16000_signal_restoration.png) | [View](outputs/chirp/learned_signal_restoration/am_9db/row_16000_signal_restoration.png) |
+| 17200 | [View](outputs/chirp/learned_signal_restoration/chirp_9db/row_17200_signal_restoration.png) | [View](outputs/chirp/learned_signal_restoration/am_9db/row_17200_signal_restoration.png) |
+| 18400 | [View](outputs/chirp/learned_signal_restoration/chirp_9db/row_18400_signal_restoration.png) | [View](outputs/chirp/learned_signal_restoration/am_9db/row_18400_signal_restoration.png) |
+| 19500 | [View](outputs/chirp/learned_signal_restoration/chirp_9db/row_19500_signal_restoration.png) | [View](outputs/chirp/learned_signal_restoration/am_9db/row_19500_signal_restoration.png) |
 
-Visual sharpness alone is never treated as proof of improvement. A method that looks sharper but decreases SSIM/PSNR is kept and reported as an informative failure case.
+[Chirp numerical results](outputs/chirp/learned_signal_restoration/chirp_9db/heldout_metrics.csv) · [AM numerical results](outputs/chirp/learned_signal_restoration/am_9db/heldout_metrics.csv)
 
-## Results and evidence
+## How the learned method works
 
-The current run uses six real RGB–thermal samples × two modalities × three degradation profiles.
+The network receives two channels: the corrupted waveform and a mask marking observed samples. Five convolutional layers learn a correction that is added to the input. Training compares the prediction with the original training trace, weighting missing samples four times as heavily as visible samples.
 
-- **36** screenshot-ready comparison sheets
-- **36** large clean → degraded → best-restored before/after panels
-- **288** standalone clean / degraded / enhanced image outputs
-- Per-image and aggregate CSV metrics
-- Six original visible image triplets committed under `data/samples/`
+The implementation uses 14 epochs, batches of 64, AdamW with learning rate `0.002`, and random seed `29`. The model receives no evaluation target in its forward pass. Full details are in [run_chirp_learned_restoration.py](run_chirp_learned_restoration.py).
 
-| Example evidence | Link |
-|---|---|
-| Real RGB + HR thermal + LR thermal source | [open](outputs/ulb17_vt/00_source_pair.png) |
-| Real thermal image with severe degradation and every method | [open](outputs/real_image_enhancement/00_thermal_severe_comparison.png) |
-| Real optical image with motion degradation and every method | [open](outputs/real_image_enhancement/00_optical_motion_comparison.png) |
-| Per-image metrics | [open](outputs/real_image_enhancement/metrics_per_image.csv) |
-| Aggregate metrics | [open](outputs/real_image_enhancement/metrics_summary.csv) |
-| Visual before/after gallery | [open](outputs/real_image_enhancement/featured_before_after) |
+## Run on a laptop
 
-### Best observed Phase 1 outcomes
-
-The best method is chosen separately for the modality and degradation—not by visual preference alone.
-
-| Case | Best evaluated method | Mean SSIM: degraded -> restored |
-|---|---|---:|
-| Optical, moderate degradation | NLM + CLAHE + unsharp | 0.841 -> 0.856 |
-| Optical, motion degradation | NLM + CLAHE + unsharp | 0.792 -> 0.817 |
-| Optical, severe degradation | NLM + CLAHE + unsharp | 0.636 -> 0.739 |
-| Thermal, moderate degradation | Conservative NLM | 0.865 -> 0.868 |
-| Thermal, motion degradation | Conservative NLM | 0.845 -> 0.848 |
-| Thermal, severe degradation | NLM + CLAHE | 0.681 -> 0.766 |
-
-The gains on moderate thermal inputs are intentionally reported as small. This is a useful finding: when an input is already structurally good, aggressive processing should not be expected to create a dramatic or trustworthy change.
-
-### Method-by-method learning trail
-
-| Step | What was tried | Observed result | Decision captured in repository |
-|---:|---|---|---|
-| 0 | Degraded baseline only | Severe blur/noise reduces thermal SSIM to 0.681; missing blocks remain | Baseline sheet and metrics saved |
-| 1 | Gaussian+CLAHE and Median+CLAHE | More visible local contrast, but frequent noise amplification and lower fidelity in moderate thermal images | Kept as comparison, not default choice |
-| 2 | Bilateral filtering | Smoother noise with edges partly retained; performance depends on degradation type | Retained as edge-aware baseline |
-| 3 | Conservative NLM only | Best for moderate/motion thermal images: preserves signal without aggressive remapping | Preferred conservative setting for mild degradation |
-| 4 | NLM+CLAHE and NLM+unsharp | Best structural recovery under severe degradation (thermal SSIM 0.681 → 0.766; optical 0.636 → 0.739) | Featured as severe-case candidate |
-| 5 | Automatic-mask Telea inpainting | Can fill a region visually but is unable to verify original content | Explicitly reported as repair candidate, not truth recovery |
-| 6 | Pre-trained EDSR neural SR | Added as a real neural-SR experiment for waveform-image rendering | Retained as exploratory; not claimed medically validated |
-
-This progression is why the project includes methods that do not win: it documents informed elimination and shows why later choices were made.
-
-### Selected visual evidence gallery
-
-Each sheet always starts with the clean reference and degraded input, followed by **every** attempted restoration. The examples below deliberately cover different modalities and failure modes.
-
-| Case | What to inspect | Result |
-|---|---|---|
-| [Optical / moderate](outputs/real_image_enhancement/00_optical_moderate_comparison.png) | Noise, low contrast, 2× loss, missing blocks | NLM+CLAHE variants improve traceability of scene boundaries but do not recreate blocked content. |
-| [Optical / motion](outputs/real_image_enhancement/00_optical_motion_comparison.png) | Directional blur and compression | NLM+CLAHE+unsharp has highest mean SSIM within this condition. |
-| [Thermal / moderate](outputs/real_image_enhancement/00_thermal_moderate_comparison.png) | Thermal noise and contrast loss | Conservative NLM is preferred: it reduces noise while avoiding excess contrast manipulation. |
-| [Thermal / severe](outputs/real_image_enhancement/00_thermal_severe_comparison.png) | Strong blur, low resolution, noise, holes | NLM+CLAHE gives the best structural score, but holes remain an uncertainty rather than recovered truth. |
-
-![Optical motion example](outputs/real_image_enhancement/00_optical_motion_comparison.png)
-
-![Thermal moderate example](outputs/real_image_enhancement/00_thermal_moderate_comparison.png)
-
-## Exact technical protocol
-
-### Input preparation
-
-The ULB17-VT pickle archive is read directly without changing its source arrays. For presentation and conventional image processing, each thermal image is mapped to an 8-bit display range using its own 1st–99th percentile range. The original raw thermal array is never overwritten. Optical RGB data remains in its native 8-bit three-channel form.
-
-The visible subset uses fixed official test-set indices: `0, 7, 14, 23, 31, 40`. Fixed indices make visual examples and aggregate measurements repeatable.
-
-### Degradation model
-
-The degradation is deterministic for a sample/profile combination. It follows this ordered pipeline:
-
-```text
-clean image
-  -> resize down (2× moderate/motion; 4× severe)
-  -> bicubic resize to original dimensions
-  -> Gaussian blur (moderate/severe) or 13-pixel horizontal motion kernel
-  -> contrast/brightness reduction
-  -> additive zero-mean Gaussian noise
-  -> two rectangular missing-data blocks
-  -> JPEG encode/decode (quality 48 moderate/motion; 24 severe)
-```
-
-This produces a mixed-degradation setting closer to practical image failures than applying a single filter benchmark. It also allows controlled ablation later: any individual step can be disabled or varied in `run_real_image_enhancement.py`.
-
-### Restoration methods and parameters
-
-| Method | Implementation details | Intended benefit | Failure mode to monitor |
-|---|---|---|---|
-| Bicubic baseline | OpenCV cubic interpolation | Reference for resizing | Cannot add lost detail |
-| Gaussian+CLAHE | Gaussian sigma 0.8, CLAHE clip limit 2.0, 8×8 tiles | Mild smoothing and local contrast | Noise/false contrast boost |
-| Median+CLAHE | 3×3 median, CLAHE | Remove impulse-like noise | Removes narrow detail |
-| Bilateral+CLAHE | Diameter 7, sigma color/space 40, CLAHE | Smooth while protecting edges | Can alter thermal gradients |
-| Conservative bilateral | Diameter 7, sigma color/space 35 | Edge-aware smoothing without contrast remapping | May retain fine noise |
-| Conservative NLM | Fast NLM, strength 6 color/gray | Strong denoising with no CLAHE | May blur small features |
-| NLM+CLAHE | Fast NLM plus CLAHE | Denoise and expose local structure | Can make noise appear as detail |
-| NLM+CLAHE+unsharp | NLM+CLAHE, then 1.3 sigma unsharp mask | Sharper boundaries | Ringing / oversharpening |
-| Automatic Telea inpainting | Candidate mask from flat grey missing regions, radius 5 | Fill known-like corrupt regions | Plausible fill is not recovered ground truth |
-
-The waveform-image experiment adds **blind waveform interpolation** and real pre-trained **EDSR ×2 neural super-resolution**. Those experiments are separate and clearly marked exploratory.
-
-### Why missing regions are treated differently
-
-Blur and noise can often be reduced by filters because some local information remains. A completely blank/occluded patch contains no direct source information. Inpainting can create a visually continuous patch, but it must never be presented as verified anatomy, verified temperature, or verified waveform. The result should be displayed as an uncertainty-aware repair candidate and validated against another frame/sensor/reference wherever possible.
-
-## How to read the outputs
-
-### Comparison-sheet layout
-
-```text
-clean reference | degraded input | conservative methods | contrast methods | inpainting
-```
-
-- **Clean reference** is never given to the enhancement method.
-- **Degraded input** is the only input a real restoration pipeline receives.
-- **Remaining panels** are alternative outputs from exactly the same input.
-- `metrics_per_image.csv` supplies the corresponding measured fidelity.
-
-### File naming
-
-`00_thermal_severe_comparison.png` means: test image index 00, thermal modality, severe degradation, one complete sheet of results. The `individual_outputs/` folder, kept locally, contains the same results as separate full-resolution images.
-
-### Interpretation rules used in this project
-
-1. Compare to the clean reference visually, then check PSNR/SSIM/MAE.
-2. Prefer the least aggressive method that preserves the relevant structure.
-3. Do not call a result “better” merely because its contrast is higher.
-4. Treat inpainted pixels as estimated content, not source truth.
-5. For radiometric thermal analysis, calculate temperature from raw calibrated values, not a contrast-enhanced display image.
-
-## Running individual experiments
-
-| Command | Produces |
-|---|---|
-| `python run_real_image_enhancement.py` | Main 36 real RGB/thermal comparison sheets and metrics |
-| `python run_ulb17_benchmark.py` | Direct 80×60 → 320×240 thermal 4× super-resolution comparison |
-| `python run_waveform_image_benchmark.py` | Paired waveform-image degradation, restoration, gap-repair demonstrations |
-| `$env:RUN_EDSR_ALL=1; python run_waveform_image_benchmark.py` | EDSR neural SR on every waveform example; slower on CPU |
-| `python export_real_samples.py` | Rebuilds the visible six-image source subset from downloaded archive |
-
-## Running on external Chirp HDF5 recordings
-
-The repository also contains a data-specific runner for the supplied Chirp recordings at `C:\Users\DELL\Desktop\hs lit theiory\Chirp data`. It renders real HDF5 traces as waveform images, creates blurred/noisy/missing versions, then writes clean → degraded → best-restored comparisons next to the supplied data.
-
-```powershell
-python run_chirp_enhancement.py
-```
-
-See [CHIRP_DATA_RUN.md](CHIRP_DATA_RUN.md) for source-file shapes, methods, results, and output locations.
-
-## Extension to biomedical feature extraction
-
-Phase 1 deliberately stops before making biomedical-property claims. A validated Phase 2 would use paired biomedical acquisition and independent reference values:
-
-```text
-raw optical + radiometric thermal frames
-             -> enhancement selected on held-out data
-             -> ROI / waveform / contour extraction
-             -> calibrated feature model
-             -> compare against independent physical reference
-```
-
-Candidate image-derived intermediate features include ROI intensity statistics, thermal gradients, hotspot area, boundary geometry, temporal waveform shape, and signal quality. Density and Young’s modulus are not image-enhancement outputs; their estimation requires a separately calibrated mechanical/biophysical model and ground-truth measurements.
-
-## Reproducibility
-
-### Requirements
+Run these commands from the repository root:
 
 ```powershell
 python -m pip install -r requirements.txt
+python run_chirp_enhancement.py
+python run_chirp_learned_restoration.py --source chirp_9db
+python run_chirp_learned_restoration.py --source am_9db
 ```
 
-### Run the real-image enhancement benchmark
+Both scripts currently read data from `C:\Users\DELL\Desktop\hs lit theiory\Chirp data`. On another machine, set `DATA_ROOT` near the top of each script to the folder containing the three HDF5 files. The raw files are local inputs and are not included in this repository.
 
-The compact real samples are already present. This command regenerates all clean/degraded/restored results.
+Re-running writes results to `Chirp_enhancement_results` inside that data folder. The figures and CSVs under `outputs/chirp/` are committed snapshots of the existing runs, available to browse without the raw data. Training also saves a model checkpoint locally.
 
-```powershell
-python run_real_image_enhancement.py
-```
+The learned runner supports `--source v3`; a V3 learned run is not included in the current evidence. Its raster image results are included above.
 
-Generated files:
+## Project layout
 
 ```text
-outputs/real_image_enhancement/
-  00_thermal_severe_comparison.png
-  00_optical_motion_comparison.png
-  ...                                   # 36 visual comparison sheets
-  individual_outputs/                   # 288 standalone images
-  metrics_per_image.csv
-  metrics_summary.csv
+README.md                         Primary project, visuals and results
+PROJECT_WRITEUP.md                Title, motivation, objectives and methodology
+CHIRP_DATA_RUN.md                 Dataset details and reproduction guide
+run_chirp_enhancement.py          Chirp waveform-image experiments
+run_chirp_learned_restoration.py  Numerical waveform reconstruction
+src/pipeline.py                   Shared classical methods and image metrics
+outputs/chirp/                   Published Chirp figures and CSV results
+requirements.txt                 Shared Python dependencies
+additional_experiments/
+  optical_thermal_benchmark/     Earlier work outside the assigned task
 ```
 
-### Rebuild the visible data subset from the original archive
+## Next steps toward the intended application
 
-```powershell
-curl.exe -L --output data\ULB17-VT.pkl "https://zenodo.org/records/2557535/files/ULB17-VT.pkl?download=1"
-python export_real_samples.py
-```
+- Evaluate longer and differently positioned gaps with separate masked-region metrics.
+- Test on unseen recordings and naturally degraded signals.
+- Validate trace extraction when only an image is available.
+- Obtain synchronized optical–thermal biomedical data and evaluate both modalities.
+- Measure whether enhancement improves downstream waveform feature accuracy.
 
-### Run the 4× thermal super-resolution comparison
+Density and Young's modulus remain downstream research goals. Estimating them requires a suitable physical model, calibration, and independent measurements; the current enhancement pipeline does not calculate these properties.
 
-```powershell
-python run_ulb17_benchmark.py
-```
+## Additional exploratory work
 
-### Run waveform-image recovery experiments
-
-```powershell
-python run_waveform_image_benchmark.py
-```
-
-This additional controlled experiment creates paired optical and thermal waveform-image renders, applies blur/noise/lower resolution/missing trace segments, then evaluates filters, inpainting, blind trace interpolation, and EDSR. It demonstrates how image restoration can support later waveform feature extraction. The waveform renders are synthetic demonstrations, explicitly separate from the real-image benchmark.
-
-### Waveform-image recovery gallery
-
-The waveform experiment gives a direct visual analogue of incomplete physiological traces: a clean waveform image is degraded, sections are erased, then several recovery strategies are tested. The featured panel selects the highest-SSIM output for that individual render; the all-method sheet preserves every trial.
-
-| Optical waveform with missing trace regions | Thermal waveform with missing trace regions |
-|---|---|
-| [Before/after panel](outputs/waveform_images/featured_before_after/101_optical_before_after.png) | [Before/after panel](outputs/waveform_images/featured_before_after/101_thermal_before_after.png) |
-| [All methods](outputs/waveform_images/101_optical_all_methods.png) | [All methods](outputs/waveform_images/101_thermal_all_methods.png) |
-| [Missing-gap repair view](outputs/waveform_images/gap_repair_before_after/101_optical_gap_repair.png) | [Missing-gap repair view](outputs/waveform_images/gap_repair_before_after/101_thermal_gap_repair.png) |
-
-![Optical waveform recovery](outputs/waveform_images/featured_before_after/101_optical_before_after.png)
-
-![Optical missing-waveform repair](outputs/waveform_images/gap_repair_before_after/101_optical_gap_repair.png)
-
-The periodic-template gap-repair output assumes the trace repeats steadily and copies an adjacent observed cycle into a known missing interval. It can make a trace continuous for display or downstream candidate extraction, but it is an **estimate**, not verified ground truth. This limitation is especially important for irregular physiological rhythms.
-
-## Repository layout
-
-```text
-data/samples/ulb17_vt_test/        # visible real RGB/thermal source images
-src/pipeline.py                    # degradation-independent restorers and metrics
-export_real_samples.py             # exports small real-image subset from public archive
-run_real_image_enhancement.py      # main Phase 1 benchmark
-run_ulb17_benchmark.py             # original LR thermal -> HR thermal 4× benchmark
-run_waveform_image_benchmark.py    # missing-trace and waveform-image experiment
-outputs/                           # figures and numerical evidence
-DATA_AND_ETHICS.md                 # source, privacy, and radiometric-data safeguards
-PROJECT_GUIDE.md                   # plain-language explanation
-```
-
-## Technical observations from Phase 1
-
-1. Restoration is problem-dependent: one filter cannot be assumed to solve blur, noise, contrast loss, and missing data simultaneously.
-2. Contrast enhancement can make an image more readable yet reduce fidelity to the clean reference. Therefore visual and numerical scoring are both required.
-3. Generic inpainting can fill a hole but cannot guarantee that the recovered pixels represent true anatomy or thermal values.
-4. Neural super-resolution is promising as an experiment, but a generic pre-trained model must not be presented as medically validated.
-5. Raw radiometric thermal values must be retained for quantitative temperature analysis; contrast-enhanced images are display/segmentation aids unless separately validated.
-
-## Next phase
-
-The next step is to run this same protocol on a licensed biomedical RGB–thermal dataset with synchronized physiological ground truth, use subject-level separation, and evaluate downstream feature extraction against independent references. The image-restoration framework, output organization, and metrics are already in place.
-
-## Responsible use
-
-This code is for research and educational benchmarking. It is not a diagnostic device and does not directly infer density, Young’s modulus, or any clinical parameter. See [DATA_AND_ETHICS.md](DATA_AND_ETHICS.md).
+The earlier RGB–thermal benchmark and synthetic optical/thermal waveform demos are preserved in [additional_experiments/optical_thermal_benchmark/](additional_experiments/optical_thermal_benchmark/). They are additional experiments outside the assigned task, with their original methods, data samples, notebook, and result galleries.

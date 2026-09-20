@@ -8,3 +8,11 @@ outputs/real_image_enhancement/individual_outputs/
 outputs/ulb17_vt/individual_outputs/
 outputs/waveform_images/individual_outputs/
 outputs/*.mp4
+additional_experiments/optical_thermal_benchmark/data/ibvp/
+additional_experiments/optical_thermal_benchmark/data/ULB17-VT.pkl
+additional_experiments/optical_thermal_benchmark/data/fda_facial_temperature/
+additional_experiments/optical_thermal_benchmark/models/
+additional_experiments/optical_thermal_benchmark/outputs/real_image_enhancement/individual_outputs/
+additional_experiments/optical_thermal_benchmark/outputs/ulb17_vt/individual_outputs/
+additional_experiments/optical_thermal_benchmark/outputs/waveform_images/individual_outputs/
+additional_experiments/optical_thermal_benchmark/outputs/*.mp4

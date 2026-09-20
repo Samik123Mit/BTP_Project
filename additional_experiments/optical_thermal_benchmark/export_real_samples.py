@@ -9,7 +9,7 @@ import pickle
 import cv2
 import numpy as np
 
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).resolve().parent
 SOURCE = ROOT / 'data' / 'ULB17-VT.pkl'
 DEST = ROOT / 'data' / 'samples' / 'ulb17_vt_test'
 INDICES = [0, 7, 14, 23, 31, 40]

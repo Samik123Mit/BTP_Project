@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from src.pipeline import (RESTORERS, DegradationConfig, degrade, estimate_bpm,
                           make_demo_pair, normalized_correlation, psnr, rms_contrast, ssim_global)
 

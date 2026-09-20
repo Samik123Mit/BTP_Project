@@ -1,8 +1,9 @@
 """Data-driven denoising and missing-segment reconstruction on real Chirp HDF5 traces.
 
-This script uses a participant/file-level holdout style split: rows 0..14999 are used
-only for learning a signal prior; rows 16000..19599 are held out for evaluation.
-The target signal is never supplied to the model at test time.
+This script uses a within-file row split: 6,000 rows sampled from 0..14999 train
+the model; rows 16000, 17200, 18400 and 19500 are used for evaluation.
+Original traces are normalized before synthetic corruption. The target signal
+is not a model input during prediction; the corrupted trace and mask are inputs.
 """
 from __future__ import annotations
 

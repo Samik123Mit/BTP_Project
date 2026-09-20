@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 from scipy.interpolate import PchipInterpolator
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from src.pipeline import (RESTORERS, psnr, rms_contrast, ssim_global)
 
 ROOT = Path(__file__).parent
