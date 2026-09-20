@@ -15,7 +15,7 @@ def verify(root):
     metrics = pd.read_csv(root/"metrics.csv")
     verified = 0
     for name, expected in manifest["code_sha256"].items():
-        actual = hashlib.sha256((ROOT/name).read_bytes()).hexdigest()
+        actual = hashlib.sha256((ROOT/name.replace("\\", "/")).read_bytes()).hexdigest()
         assert actual == expected, f"Benchmark source changed since this run: {name}"
     for source, details in manifest["sources"].items():
         train, validation, test = map(set, (
